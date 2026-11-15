@@ -1,0 +1,16 @@
+# secrets and personal info
+.env
+.env.*
+!.env.example
+config.json
+
+# generated data with real people's emails
+contacts.csv
+drafts.csv
+sent.csv
+optout.txt
+*.backup*.csv
+
+__pycache__/
+.DS_Store
+.vercel

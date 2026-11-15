@@ -1,0 +1,20 @@
+{
+  "model": "claude-opus-5-5",
+  "daily_cap": 40,
+  "sender_profile": {
+    "name": "Ashish",
+    "about": "Senior at Champlain College studying computer science, minoring in math and cybersecurity. Graduating soon and applying to master's programs.",
+    "why_i_collect": "I collect school and tech company merch and like repping places I admire.",
+    "items_i_would_love": "socks, sweaters or hoodies, mugs, or anything you usually give out",
+    "mailing_address": "PUT YOUR MAILING ADDRESS HERE",
+    "signature": "Ashish\nChamplain College, Class of 2026"
+  },
+  "smtp": {
+    "host": "smtp.gmail.com",
+    "port": 587,
+    "username": "you@gmail.com",
+    "from_address": "you@gmail.com",
+    "password": ""
+  },
+  "footer": "If you'd rather not hear from me again, just reply 'no thanks' and I won't email again."
+}
