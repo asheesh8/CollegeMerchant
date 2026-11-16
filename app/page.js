@@ -1,8 +1,7 @@
-import { storeKind } from "../lib/store.js";
-import Accounts from "./Accounts.js";
+import Dashboard from "./Dashboard.js";
 
 export const dynamic = "force-dynamic";
 
 export default function Home() {
-  return <Accounts storage={storeKind()} />;
+  return <Dashboard />;
 }
