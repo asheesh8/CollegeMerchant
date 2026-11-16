@@ -18,6 +18,11 @@ export async function GET(req) {
       drafts_waiting: waiting,
       recent_openers: recentOpeners(all),
       need_email: all.filter((t) => t.status === "new" && t.website).slice(0, limit).map(pick),
+      // Drafts not yet approved, so the task can rewrite them when the writing rules change.
+      to_review: all
+        .filter((t) => t.status === "drafted" && t.draft)
+        .slice(0, limit)
+        .map((t) => ({ ...pick(t), website_excerpt: t.page_text || "", current_subject: t.draft.subject, current_body: t.draft.body, drafted_at: t.draft.at })),
       need_draft: all
         .filter((t) => t.status === "found" && t.email)
         .slice(0, limit)
