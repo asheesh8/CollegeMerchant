@@ -28,7 +28,9 @@ Everything can now be done from the website, no terminal needed:
 
 It never emails the same address twice and always skips the opt-out list.
 
-**Extra setting for drafts:** add `ANTHROPIC_API_KEY` (from https://console.anthropic.com) in Vercel > Settings > Environment Variables, then redeploy.
+**Drafts without an API key:** a daily scheduled Claude task (on your Claude subscription) does the drafting. In Settings > Daily drafting task, click **Make a token** and save it as `CM_AGENT_TOKEN` in the Claude cloud environment the task runs in. The task calls `/api/agent/*` with `Authorization: Bearer <token>`: it reads the queue, asks the site to look up emails, and hands back drafts, which land in Review. It can't approve or send. Only the token's SHA-256 hash is stored (or set `PORTAL_AGENT_TOKEN` in Vercel instead).
+
+Optional: set `ANTHROPIC_API_KEY` in Vercel to also get **Write drafts** and **Rewrite** buttons on the site, billed to that API key.
 
 ## Email accounts page
 

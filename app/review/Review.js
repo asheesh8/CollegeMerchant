@@ -6,6 +6,7 @@ import { api } from "../ui.js";
 export default function Review() {
   const [targets, setTargets] = useState(null);
   const [footer, setFooter] = useState("");
+  const [claudeReady, setClaudeReady] = useState(false);
   const [idx, setIdx] = useState(0);
   const [tab, setTab] = useState("review");
   const [error, setError] = useState("");
@@ -14,6 +15,7 @@ export default function Review() {
     try {
       const [t, s] = await Promise.all([api("/api/targets"), api("/api/settings")]);
       setTargets(t.targets);
+      setClaudeReady(t.claude_ready);
       setFooter(s.settings.footer);
       const queue = t.targets.filter((x) => x.status === "drafted");
       const want = focusId || new URLSearchParams(window.location.search).get("id");
@@ -47,7 +49,7 @@ export default function Review() {
         <section className="panel">
           <h2>All caught up</h2>
           <p className="muted" style={{ margin: 0 }}>
-            No drafts waiting. {approved.length ? <>You have {approved.length} approved. <Link href="/">Start sending</Link> from the dashboard.</> : <>Write some in <Link href="/places">Places</Link>.</>}
+            No drafts waiting. {approved.length ? <>You have {approved.length} approved. <Link href="/">Start sending</Link> from the dashboard.</> : <>Add places in <Link href="/places">Places</Link> and your daily Claude task will write drafts for them.</>}
           </p>
         </section>
       ) : (
@@ -55,6 +57,7 @@ export default function Review() {
           key={current.id + (current.draft?.at || "")}
           t={current}
           footer={footer}
+          claudeReady={claudeReady}
           position={`${Math.min(idx, queue.length - 1) + 1} of ${queue.length}`}
           onPrev={idx > 0 ? () => setIdx(idx - 1) : null}
           onNext={idx < queue.length - 1 ? () => setIdx(idx + 1) : null}
@@ -65,7 +68,7 @@ export default function Review() {
   );
 }
 
-function Draft({ t, footer, position, onPrev, onNext, replace }) {
+function Draft({ t, footer, claudeReady, position, onPrev, onNext, replace }) {
   const [subject, setSubject] = useState(t.draft.subject);
   const [body, setBody] = useState(t.draft.body);
   const [busy, setBusy] = useState("");
@@ -124,7 +127,7 @@ function Draft({ t, footer, position, onPrev, onNext, replace }) {
       <div className="buttons">
         <button className="primary" disabled={Boolean(busy)} onClick={() => run("approve")}>{busy === "approve" ? "Approving…" : "Approve"}</button>
         {changed && <button disabled={Boolean(busy)} onClick={() => run("save")}>Save edits</button>}
-        <button disabled={Boolean(busy)} onClick={() => run("rewrite")}>{busy === "rewrite" ? "Rewriting…" : "Rewrite"}</button>
+        {claudeReady && <button disabled={Boolean(busy)} onClick={() => run("rewrite")}>{busy === "rewrite" ? "Rewriting…" : "Rewrite"}</button>}
         <button disabled={Boolean(busy)} onClick={() => run("skip")}>Skip this place</button>
       </div>
       {note && <div className={`note ${note.ok ? "ok" : "bad"}`}>{note.message}</div>}

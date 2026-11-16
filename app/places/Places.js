@@ -13,6 +13,7 @@ const FILTERS = {
 
 export default function Places() {
   const [targets, setTargets] = useState(null);
+  const [claudeReady, setClaudeReady] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
   const [busy, setBusy] = useState({}); // id -> "find" | "draft"
@@ -21,7 +22,9 @@ export default function Places() {
 
   async function refresh() {
     try {
-      setTargets((await api("/api/targets")).targets);
+      const r = await api("/api/targets");
+      setTargets(r.targets);
+      setClaudeReady(r.claude_ready);
     } catch (e) {
       setError(e.message);
     }
@@ -99,7 +102,9 @@ export default function Places() {
           ) : (
             <>
               <button disabled={!needFind.length} onClick={() => runBatch("find", needFind)}>Find emails ({needFind.length})</button>
-              <button className="primary" disabled={!needDraft.length} onClick={() => runBatch("draft", needDraft)}>Write drafts ({needDraft.length})</button>
+              {claudeReady && (
+                <button className="primary" disabled={!needDraft.length} onClick={() => runBatch("draft", needDraft)}>Write drafts ({needDraft.length})</button>
+              )}
             </>
           )}
         </div>
@@ -116,7 +121,7 @@ export default function Places() {
               </thead>
               <tbody>
                 {list.map((t) => (
-                  <Row key={t.id} t={t} busy={busy[t.id]} act={act} patch={patch} remove={remove} />
+                  <Row key={t.id} t={t} busy={busy[t.id]} act={act} patch={patch} remove={remove} claudeReady={claudeReady} />
                 ))}
               </tbody>
             </table>
@@ -125,13 +130,14 @@ export default function Places() {
         <p className="muted small" style={{ marginBottom: 0 }}>
           Finding an email reads up to six public pages of the site (contact, admissions, alumni and so on), follows the
           site's robots.txt, and pauses between pages. Big companies rarely list one, so type in a contact you found yourself.
+          {!claudeReady && <> Drafts are written by your daily Claude task, which also looks up emails for new places, so you can just add places and check Review the next day.</>}
         </p>
       </section>
     </main>
   );
 }
 
-function Row({ t, busy, act, patch, remove }) {
+function Row({ t, busy, act, patch, remove, claudeReady }) {
   const [email, setEmail] = useState(t.email || "");
   useEffect(() => setEmail(t.email || ""), [t.email]);
   const locked = ["sent", "replied", "declined"].includes(t.status);
@@ -172,7 +178,7 @@ function Row({ t, busy, act, patch, remove }) {
       <td>
         <div className="actions" style={{ flexWrap: "nowrap" }}>
           {!locked && t.website && <button disabled={Boolean(busy)} onClick={() => act(t, "find")}>Find</button>}
-          {!locked && t.email && (
+          {claudeReady && !locked && t.email && (
             <button disabled={Boolean(busy)} onClick={() => act(t, "draft")}>{t.draft ? "Rewrite" : "Draft"}</button>
           )}
           {t.status === "drafted" && <Link href={`/review?id=${t.id}`}><button>Review</button></Link>}

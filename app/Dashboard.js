@@ -153,7 +153,7 @@ function Checklist({ s }) {
   const items = [
     [s.account, <>Connect an email account in <Link href="/accounts">Accounts</Link>.</>],
     [s.profile_ready, <>Add your mailing address in <Link href="/settings">Settings</Link>.</>],
-    [s.claude_ready, <>Add <code>ANTHROPIC_API_KEY</code> in Vercel so drafts can be written.</>],
+    [s.claude_ready || s.task_connected, <>Connect the daily drafting task in <Link href="/settings">Settings</Link>.</>],
     [s.total > 0, <>Add schools and companies in <Link href="/places">Places</Link>.</>],
   ].filter(([ok]) => !ok);
   if (!items.length) return null;

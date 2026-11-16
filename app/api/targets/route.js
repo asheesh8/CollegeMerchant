@@ -4,7 +4,7 @@ import { addTargets, listTargets } from "../../../lib/portal.js";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return handle(async () => ({ targets: await listTargets() }));
+  return handle(async () => ({ targets: await listTargets(), claude_ready: Boolean(process.env.ANTHROPIC_API_KEY) }));
 }
 
 // { items: [{ name, website, kind, notes, email, contact_name }] }
