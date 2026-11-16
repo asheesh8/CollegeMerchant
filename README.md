@@ -1,16 +1,45 @@
 # Free merch request emailer
 
-Finds the right public contact at each school or company, has Claude write a short, personal email for each one, and sends them slowly from your own Gmail.
+Finds the right public contact at each school or company, has Claude write a short, personal email for each one, and sends them slowly from your own email account (Gmail or any other).
 
 ## One-time setup (about 10 minutes)
 
 1. Install Python 3.10+ and run `pip install -r requirements.txt`
 2. Get a Claude API key at https://console.anthropic.com and run `export ANTHROPIC_API_KEY=sk-ant-...`
    Each email costs well under a cent to write.
-3. Gmail app password: turn on 2-Step Verification, then go to https://myaccount.google.com/apppasswords and make one.
-   Run `export SMTP_PASSWORD=the16charpassword` (don't put it in a file you share).
-4. `cp config.example.json config.json`, then fill in your Gmail address, your mailing address
+3. Add the email account(s) you want to send from in the web page (see "Email accounts page" below).
+   It works with Gmail (app password), Outlook, Yahoo, iCloud, Zoho, or any SMTP server.
+4. `cp config.example.json config.json`, then fill in your mailing address
    (where the merch goes), and anything true about you in `sender_profile`. The more real detail, the better the emails.
+
+## Email accounts page
+
+A small locked web page where you type an email address, enter its password or app password, test it, and save it.
+`merch.py send` then sends from your default account (or `--account you@example.com`). Run `python merch.py accounts` to list them.
+
+**On your laptop**
+
+1. Install Node 20+ and run `npm install`
+2. `cp .env.example .env.local`, then fill in:
+   - `ADMIN_PASSWORD`: anything you like, used to open the page
+   - `ACCOUNTS_KEY`: run `openssl rand -base64 32` and paste the result. This encrypts the saved passwords.
+3. `npm run dev` and open http://localhost:3000. Accounts are saved, encrypted, to `.data/accounts.json` (never committed).
+
+**On Vercel**
+
+1. Import the repo in Vercel. It detects Next.js; no settings to change.
+2. In Project > Settings > Environment Variables, add `ADMIN_PASSWORD` and `ACCOUNTS_KEY`.
+3. In the Storage tab, add an Upstash Redis database to the project (free tier is plenty). That sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+4. Redeploy. To have `merch.py` on your laptop use the accounts saved on Vercel, copy `ACCOUNTS_KEY`, `KV_REST_API_URL`
+   and `KV_REST_API_TOKEN` into your local `.env.local`.
+
+**Gmail:** turn on 2-Step Verification, then make an app password at https://myaccount.google.com/apppasswords
+and paste it in. Your normal Gmail password won't work.
+
+How the secrets are kept: passwords are encrypted with AES-256-GCM using `ACCOUNTS_KEY` before they're stored, the page never
+sends a saved password back to the browser, and every page and API route needs the admin password (signed, HTTP-only cookie).
+If you lose `ACCOUNTS_KEY` you'll need to re-enter the passwords. If you never save an account, the old `smtp` block in
+config.json plus `SMTP_PASSWORD` still works.
 
 ## Every time
 

@@ -7,11 +7,17 @@ Steps (run in order):
   (open drafts.csv, read each email, set approved=yes on the ones you like)
   python merch.py send            # dry run: shows what would be sent
   python merch.py send --live     # actually sends, up to the daily cap
+  python merch.py accounts        # list email accounts saved in the web page
+
+Sends from the default account saved in the web page (npm run dev, or your Vercel site).
+Pick another with --account you@example.com. With no saved accounts it falls back to
+the "smtp" block in config.json and the SMTP_PASSWORD env var.
 
 Only reads public pages, follows robots.txt, waits between requests.
 Never emails the same address twice and skips anyone in optout.txt.
 """
 import argparse
+import base64
 import csv
 import datetime as dt
 import html
@@ -27,7 +33,7 @@ import urllib.parse
 import urllib.request
 import urllib.robotparser
 from email.message import EmailMessage
-from email.utils import make_msgid
+from email.utils import formataddr, make_msgid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 P = lambda name: os.path.join(HERE, name)
@@ -85,6 +91,117 @@ def optouts():
         return set()
     with open(path, encoding="utf-8") as f:
         return {l.strip().lower() for l in f if l.strip() and not l.startswith("#")}
+
+
+def load_env_files():
+    """Read KEY=value lines from .env and .env.local (same files the web page uses). Real env vars win."""
+    for name in (".env", ".env.local"):
+        path = P(name)
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                v = v.strip().strip('"').strip("'")
+                if v and not os.environ.get(k.strip()):
+                    os.environ[k.strip()] = v
+
+
+# ---------- saved email accounts (from the web page) ----------
+
+ACCOUNTS_REDIS_KEY = "collegemerchant:accounts"
+
+
+def _accounts_key():
+    raw = os.environ.get("ACCOUNTS_KEY", "")
+    if not raw:
+        return None
+    key = base64.b64decode(raw)
+    if len(key) != 32:
+        sys.exit("ACCOUNTS_KEY must be 32 bytes, base64 encoded (openssl rand -base64 32).")
+    return key
+
+
+def decrypt_secret(token, key):
+    """Undo lib/crypto.js encrypt(): "v1:" + base64(iv[12] | ciphertext | tag[16]), AES-256-GCM."""
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except ImportError:
+        sys.exit("Run: pip install -r requirements.txt  (needs the cryptography package)")
+    if not token.startswith("v1:"):
+        raise ValueError("unknown encryption format")
+    buf = base64.b64decode(token[3:])
+    return AESGCM(key).decrypt(buf[:12], buf[12:], None).decode("utf-8")
+
+
+def load_saved_accounts():
+    """Return {"accounts": [...], "default_id": ...} from Upstash Redis or .data/accounts.json, or None."""
+    url = os.environ.get("KV_REST_API_URL") or os.environ.get("UPSTASH_REDIS_REST_URL")
+    token = os.environ.get("KV_REST_API_TOKEN") or os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+    raw = None
+    if url and token:
+        req = urllib.request.Request(url, data=json.dumps(["GET", ACCOUNTS_REDIS_KEY]).encode(),
+                                     headers={"Authorization": f"Bearer {token}",
+                                              "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            raw = json.load(r).get("result")
+    else:
+        path = os.environ.get("ACCOUNTS_FILE") or P(os.path.join(".data", "accounts.json"))
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                raw = f.read()
+    if not raw:
+        return None
+    data = json.loads(raw)
+    return data if data.get("accounts") else None
+
+
+def pick_sender(cfg, wanted=None):
+    """Settings to send with: a saved account (default, or the one named by --account), else config.json."""
+    data = load_saved_accounts()
+    if data:
+        accts = data["accounts"]
+        if wanted:
+            match = [a for a in accts if a["email"].lower() == wanted.lower()]
+            if not match:
+                sys.exit(f"No saved account for {wanted}. Saved: " + ", ".join(a["email"] for a in accts))
+            a = match[0]
+        else:
+            a = next((x for x in accts if x["id"] == data.get("default_id")), accts[0])
+        key = _accounts_key()
+        if not key:
+            sys.exit("Found saved accounts but ACCOUNTS_KEY isn't set. Put it in .env.local (same value as the web page).")
+        try:
+            password = decrypt_secret(a["password_enc"], key)
+        except Exception:
+            sys.exit("Couldn't decrypt the saved password. Is ACCOUNTS_KEY the same one the web page uses?")
+        return {"host": a["host"], "port": int(a["port"]), "secure": bool(a.get("secure")),
+                "username": a.get("username") or a["email"], "from_address": a["email"],
+                "name": a.get("display_name") or cfg["sender_profile"]["name"],
+                "password": password, "source": "saved account"}
+    if wanted:
+        sys.exit("No accounts saved in the web page yet, so --account can't be used.")
+    s = cfg["smtp"]
+    return {"host": s["host"], "port": int(s.get("port", 587)), "secure": int(s.get("port", 587)) == 465,
+            "username": s["username"], "from_address": s["from_address"],
+            "name": cfg["sender_profile"]["name"],
+            "password": os.environ.get("SMTP_PASSWORD") or s.get("password", ""), "source": "config.json"}
+
+
+def cmd_accounts(args):
+    data = load_saved_accounts()
+    if not data:
+        print("No saved accounts. Add one in the web page (npm run dev, then open http://localhost:3000).")
+        return
+    for a in data["accounts"]:
+        mark = "*" if a["id"] == data.get("default_id") else " "
+        test = a.get("last_test") or {}
+        status = "working" if test.get("ok") else ("last test failed" if test else "not tested")
+        print(f"{mark} {a['email']:<36} {a['host']}:{a['port']}  ({status})")
+    print("\n* = default. Use --account EMAIL with send to pick another.")
 
 
 _robots = {}
@@ -287,7 +404,7 @@ def cmd_draft(args):
 
 def cmd_send(args):
     cfg = load_config()
-    s = cfg["smtp"]
+    s = pick_sender(cfg, args.account)
     cap = args.limit or cfg.get("daily_cap", DAILY_CAP_DEFAULT)
     today = dt.date.today().isoformat()
     sent_rows = read_csv(P("sent.csv"))
@@ -299,6 +416,7 @@ def cmd_send(args):
              if d.get("approved", "").strip().lower() in ("yes", "y", "1", "x")
              and d["email"].lower() not in sent and d["email"].lower() not in blocked]
     queue = queue[:left]
+    print(f"Sending from {s['from_address']} ({s['source']}).")
     print(f"{sent_today} sent today, cap {cap}. {len(queue)} ready to go.")
     if not queue:
         return
@@ -309,12 +427,17 @@ def cmd_send(args):
         return
 
     ctx = ssl.create_default_context()
-    with smtplib.SMTP(s["host"], int(s.get("port", 587)), timeout=60) as server:
-        server.starttls(context=ctx)
-        server.login(s["username"], os.environ.get("SMTP_PASSWORD") or s.get("password", ""))
+    if s["secure"]:
+        server_cm = smtplib.SMTP_SSL(s["host"], s["port"], timeout=60, context=ctx)
+    else:
+        server_cm = smtplib.SMTP(s["host"], s["port"], timeout=60)
+    with server_cm as server:
+        if not s["secure"]:
+            server.starttls(context=ctx)
+        server.login(s["username"], s["password"])
         for i, d in enumerate(queue):
             msg = EmailMessage()
-            msg["From"] = f"{cfg['sender_profile']['name']} <{s['from_address']}>"
+            msg["From"] = formataddr((s["name"], s["from_address"]))
             msg["To"] = d["email"]
             msg["Subject"] = d["subject"]
             msg["Message-ID"] = make_msgid()
@@ -340,8 +463,11 @@ def main():
     f = sub.add_parser("find"); f.add_argument("--refresh", action="store_true", help="re-scan sites already done")
     d = sub.add_parser("draft"); d.add_argument("--limit", type=int, default=0); d.add_argument("--redo", action="store_true")
     s = sub.add_parser("send"); s.add_argument("--live", action="store_true"); s.add_argument("--limit", type=int, default=0)
+    s.add_argument("--account", help="email of a saved account to send from (default: the default account)")
+    sub.add_parser("accounts", help="list email accounts saved in the web page")
     args = ap.parse_args()
-    {"find": cmd_find, "draft": cmd_draft, "send": cmd_send}[args.cmd](args)
+    load_env_files()
+    {"find": cmd_find, "draft": cmd_draft, "send": cmd_send, "accounts": cmd_accounts}[args.cmd](args)
 
 
 if __name__ == "__main__":
