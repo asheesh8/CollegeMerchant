@@ -2,7 +2,7 @@
 import { handle, jsonBody } from "../../../lib/http.js";
 import { testSettings } from "../../../lib/accounts.js";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function POST(req) {
   return handle(async () => {
