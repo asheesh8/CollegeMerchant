@@ -3,17 +3,27 @@ import { useEffect, useState } from "react";
 import { PROVIDERS, detectProvider, EMAIL_RE } from "../lib/providers.js";
 
 async function api(path, method = "GET", body) {
-  const res = await fetch(path, {
-    method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(50000),
+    });
+  } catch (e) {
+    if (e.name === "TimeoutError") throw new Error("This is taking too long, so it was stopped. Try again in a minute.");
+    throw new Error("Couldn't reach the site. Check your internet connection.");
+  }
   if (res.status === 401) {
     window.location.href = "/login";
     return {};
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    if (res.status === 504) throw new Error("The mail server didn't answer in time. Check the server name and port.");
+    throw new Error(data.error || `Request failed (${res.status})`);
+  }
   return data;
 }
 
