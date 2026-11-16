@@ -1,14 +1,18 @@
 import "./globals.css";
+import Nav from "./Nav.js";
 
 export const metadata = {
-  title: "CollegeMerchant · Email accounts",
+  title: "CollegeMerchant",
   robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Nav />
+        {children}
+      </body>
     </html>
   );
 }

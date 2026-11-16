@@ -82,7 +82,6 @@ export default function Accounts({ storage }) {
     <main className="wrap">
       <div className="top">
         <h1>Email accounts</h1>
-        <button className="link" onClick={logout}>Sign out</button>
       </div>
 
       {storage === "missing" && (

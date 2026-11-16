@@ -12,6 +12,26 @@ Finds the right public contact at each school or company, has Claude write a sho
 4. `cp config.example.json config.json`, then fill in your mailing address
    (where the merch goes), and anything true about you in `sender_profile`. The more real detail, the better the emails.
 
+## The portal (web app)
+
+Everything can now be done from the website, no terminal needed:
+
+1. **Accounts**: connect the email you send from (Gmail, school Google/Microsoft account, or any SMTP).
+2. **Settings**: fill in your profile and **mailing address**. Every email is written from this, so keep it true. The daily limit starts at 20.
+3. **Places**: add schools and companies (one at a time, or paste a list: `name, website, why you like them`).
+   Click **Find emails** to read a few public pages of each site (follows robots.txt, pauses between pages),
+   then **Write drafts** to have Claude write a personal email for each one.
+4. **Review**: read each draft, fact-check the detail it used, edit anything, and **Approve** it. Nothing is sent without your approval.
+5. **Dashboard**: click **Start sending**. Emails go out one at a time with a random 2 to 5 minute gap, up to your daily limit.
+   Keep the tab open while it runs; close it or click Stop to pause.
+6. **Sent**: see everything that went out. Mark replies, and mark "Said no" to add someone to the opt-out list.
+
+It never emails the same address twice and always skips the opt-out list.
+
+**Drafts without an API key:** a daily scheduled Claude task (on your Claude subscription) does the drafting. In Settings > Daily drafting task, click **Make a token** and save it as `CM_AGENT_TOKEN` in the Claude cloud environment the task runs in. The task calls `/api/agent/*` with `Authorization: Bearer <token>`: it reads the queue, asks the site to look up emails, and hands back drafts, which land in Review. It can't approve or send. Only the token's SHA-256 hash is stored (or set `PORTAL_AGENT_TOKEN` in Vercel instead).
+
+Optional: set `ANTHROPIC_API_KEY` in Vercel to also get **Write drafts** and **Rewrite** buttons on the site, billed to that API key.
+
 ## Email accounts page
 
 A small locked web page where you type an email address, enter its password or app password, test it, and save it.
