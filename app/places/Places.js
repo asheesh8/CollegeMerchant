@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { api, StatusPill } from "../ui.js";
+import { api, StatusPill, when } from "../ui.js";
 
 const FILTERS = {
   all: ["All", () => true],
@@ -19,6 +19,8 @@ export default function Places() {
   const [busy, setBusy] = useState({}); // id -> "find" | "draft"
   const [batch, setBatch] = useState(null); // { label, done, total }
   const stopRef = useRef(false);
+  const [job, setJob] = useState(null); // the server-side "Find emails" run
+  const lastDone = useRef(-1);
 
   async function refresh() {
     try {
@@ -30,6 +32,41 @@ export default function Places() {
     }
   }
   useEffect(() => { refresh(); }, []);
+
+  async function jobAction(action) {
+    setError("");
+    try {
+      setJob((await api("/api/find-job", "POST", { action })).job);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  const finding = job?.status === "running";
+
+  // Follow the server-side run: often while it runs, now and then otherwise (it may be started
+  // from another tab). If its chain broke, say during a redeploy, pick it back up.
+  useEffect(() => {
+    let alive = true;
+    let timer;
+    async function poll() {
+      try {
+        let j = (await api("/api/find-job")).job;
+        if (j?.stalled) j = (await api("/api/find-job", "POST", { action: "resume" })).job;
+        if (!alive) return;
+        setJob(j);
+        if (j && j.done !== lastDone.current) {
+          if (lastDone.current !== -1) refresh();
+          lastDone.current = j.done;
+        }
+      } catch {
+        // try again on the next tick
+      }
+      if (alive) timer = setTimeout(poll, finding ? 4000 : 30000);
+    }
+    timer = setTimeout(poll, finding ? 4000 : 0);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [finding]);
 
   const replace = (t) => setTargets((all) => all.map((x) => (x.id === t.id ? { ...x, ...t } : x)));
 
@@ -94,6 +131,14 @@ export default function Places() {
             ))}
           </select>
           <span className="spacer" />
+          {finding && (
+            <>
+              <span className="muted small">
+                Finding emails: {job.done} of {job.total} ({job.found} found). Keeps going if you close this page.
+              </span>
+              <button onClick={() => jobAction("stop")}>Stop</button>
+            </>
+          )}
           {batch ? (
             <>
               <span className="muted small">{batch.label}: {batch.done} of {batch.total}…</span>
@@ -101,13 +146,20 @@ export default function Places() {
             </>
           ) : (
             <>
-              <button disabled={!needFind.length} onClick={() => runBatch("find", needFind)}>Find emails ({needFind.length})</button>
+              {!finding && (
+                <button disabled={!needFind.length} onClick={() => jobAction("start")}>Find emails ({needFind.length})</button>
+              )}
               {claudeReady && (
                 <button className="primary" disabled={!needDraft.length} onClick={() => runBatch("draft", needDraft)}>Write drafts ({needDraft.length})</button>
               )}
             </>
           )}
         </div>
+        {!finding && job?.status === "done" && job.total > 0 && Date.now() - Date.parse(job.finished_at) < 24 * 3600 * 1000 && (
+          <div className="muted small" style={{ marginBottom: 10 }}>
+            Last email search finished {when(job.finished_at)}: found {job.found} of {job.total}.
+          </div>
+        )}
         {error && <div className="note bad" style={{ marginTop: 0, marginBottom: 14 }}>{error}</div>}
         {targets === null ? (
           <p className="muted">Loading…</p>
@@ -121,7 +173,7 @@ export default function Places() {
               </thead>
               <tbody>
                 {list.map((t) => (
-                  <Row key={t.id} t={t} busy={busy[t.id]} act={act} patch={patch} remove={remove} claudeReady={claudeReady} />
+                  <Row key={t.id} t={t} busy={busy[t.id]} act={act} patch={patch} remove={remove} claudeReady={claudeReady} jobCurrent={job?.current} />
                 ))}
               </tbody>
             </table>
@@ -137,7 +189,7 @@ export default function Places() {
   );
 }
 
-function Row({ t, busy, act, patch, remove, claudeReady }) {
+function Row({ t, busy, act, patch, remove, claudeReady, jobCurrent }) {
   const [email, setEmail] = useState(t.email || "");
   useEffect(() => setEmail(t.email || ""), [t.email]);
   const locked = ["sent", "replied", "declined"].includes(t.status);
@@ -171,7 +223,7 @@ function Row({ t, busy, act, patch, remove, claudeReady }) {
         )}
       </td>
       <td>
-        <StatusPill status={busy === "find" ? "finding" : t.status} />
+        <StatusPill status={busy === "find" || jobCurrent === t.id ? "finding" : t.status} />
         {busy === "draft" && <div className="muted small">Writing…</div>}
         {t.error && <div className="small status-bad">{t.error}</div>}
       </td>
