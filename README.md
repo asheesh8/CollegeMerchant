@@ -21,6 +21,11 @@ Everything can now be done from the website, no terminal needed:
 3. **Places**: add schools and companies (one at a time, or paste a list: `name, website, why you like them`).
    Click **Find emails** to read a few public pages of each site (follows robots.txt, pauses between pages),
    then **Write drafts** to have Claude write a personal email for each one.
+   Finding emails runs on the server, so you can close the page once it starts: each step looks up a place
+   in the background and then starts the next step itself (Vercel's free cron only runs once a day, so it
+   doesn't wait for one). Opening Places shows progress and a Stop button, and picks a run back up if it
+   was interrupted, for example by a redeploy. A daily cron (`/api/agent/find-job/cron`) does the same as a
+   backup. Optional: set `CRON_SECRET` in Vercel so only Vercel's cron can call it.
 4. **Review**: read each draft, fact-check the detail it used, edit anything, and **Approve** it. Nothing is sent without your approval.
 5. **Dashboard**: click **Start sending**. Emails go out one at a time with a random 2 to 5 minute gap, up to your daily limit.
    Keep the tab open while it runs; close it or click Stop to pause.
